@@ -4,6 +4,8 @@ from app.core.config import get_settings
 
 from app.api.models import router as models_router
 
+from app.api.routing import router as routing_router
+
 settings = get_settings()
 
 app = FastAPI(
@@ -13,6 +15,7 @@ app = FastAPI(
 )
 
 app.include_router(models_router)
+app.include_router(routing_router)
 
 @app.get("/health")
 async def health_check() -> dict[str, str]:
