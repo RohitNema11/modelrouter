@@ -55,3 +55,33 @@ def test_route_query_rejects_empty_query() -> None:
     response = client.post("/api/route", json={"query": ""})
 
     assert response.status_code == 422
+
+def test_chat_query_returns_response_and_metadata() -> None:
+    response = client.post(
+        "/api/chat",
+        json={"query": "Write a Python function to reverse a string."},
+    )
+
+    assert response.status_code == 200
+
+    result = response.json()
+
+    assert result["selected_model"] == "general"
+    assert result["response"].startswith("[Mock general response]")
+    assert result["routing"]["analysis"]["task_type"] == "coding"
+
+    assert result["tokens"]["input_tokens"] == 8
+    assert result["tokens"]["output_tokens"] > 0
+    assert result["tokens"]["total_tokens"] == (
+        result["tokens"]["input_tokens"] + result["tokens"]["output_tokens"]
+    )
+
+    assert result["routing_latency_ms"] >= 0
+    assert result["model_latency_ms"] >= 0
+    assert result["total_latency_ms"] >= 0
+
+
+def test_chat_query_rejects_empty_query() -> None:
+    response = client.post("/api/chat", json={"query": ""})
+
+    assert response.status_code == 422
