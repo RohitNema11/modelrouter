@@ -22,8 +22,13 @@ class ChatResponse(BaseModel):
 
     response: str
     selected_model: str
+    initial_model: str
+    fallback_used: bool
+    attempts: int = Field(ge=1)
     routing: RoutingDecision
     tokens: TokenUsage
+    estimated_cost_usd: float = Field(ge=0)
     routing_latency_ms: float = Field(ge=0)
     model_latency_ms: float = Field(ge=0)
     total_latency_ms: float = Field(ge=0)
+    

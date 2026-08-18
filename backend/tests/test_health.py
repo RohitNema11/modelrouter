@@ -76,6 +76,12 @@ def test_chat_query_returns_response_and_metadata() -> None:
         result["tokens"]["input_tokens"] + result["tokens"]["output_tokens"]
     )
 
+    assert result["estimated_cost_usd"] > 0
+
+    assert result["initial_model"] == "general"
+    assert result["fallback_used"] is False
+    assert result["attempts"] == 1
+
     assert result["routing_latency_ms"] >= 0
     assert result["model_latency_ms"] >= 0
     assert result["total_latency_ms"] >= 0
