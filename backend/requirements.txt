@@ -4,3 +4,5 @@ pydantic-settings
 pytest
 httpx
 groq
+scikit-learn
+numpy

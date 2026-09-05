@@ -1,12 +1,27 @@
 from app.schemas.routing import QueryAnalysis, TaskType
+from app.router.classifier import create_default_classifier
 
 
 class QueryAnalyzer:
-    """Classify a query with transparent, deterministic rules."""
+    """Classify a query using ML classifier (primary) with keyword fallback."""
+
+    def __init__(self, use_classifier: bool = True, use_keywords_fallback: bool = True):
+        self.use_classifier = use_classifier
+        self.use_keywords_fallback = use_keywords_fallback
+        self.classifier = None
+        self.classifier_confidence = 0.0
+        self.classifier_tier: str | None = None
+        self.classifier_error: Exception | None = None
+        
+        if use_classifier:
+            self.classifier = create_default_classifier()
 
     def analyze(self, query: str) -> QueryAnalysis:
+        """Analyze a query using the keyword and complexity rules."""
         normalized_query = query.lower().strip()
-        task_type = self._detect_task_type(normalized_query)
+        task_type = self._detect_task_type_keywords(normalized_query)
+        reasoning_msg = f"Detected {task_type.value} task using keyword rules."
+        
         complexity = self._estimate_complexity(normalized_query, task_type)
         required_capabilities = self._get_required_capabilities(task_type, complexity)
 
@@ -14,13 +29,42 @@ class QueryAnalyzer:
             task_type=task_type,
             complexity=complexity,
             required_capabilities=required_capabilities,
-            reasoning=(
-                f"Detected {task_type.value} task using local keyword rules; "
-                f"estimated complexity is {complexity:.2f}."
-            ),
+            reasoning=reasoning_msg,
         )
 
-    def _detect_task_type(self, query: str) -> TaskType:
+    def classify(self, query: str) -> tuple[str, float]:
+        """Return only the classifier's tier and confidence."""
+        self.classifier_tier = None
+        self.classifier_error = None
+
+        if not self.use_classifier or self.classifier is None:
+            error = RuntimeError("Classifier is unavailable.")
+            self.classifier_error = error
+            self.classifier_confidence = 0.0
+            raise error
+
+        try:
+            tier, confidence = self.classifier.predict(query.lower().strip())
+        except Exception as error:
+            self.classifier_error = error
+            self.classifier_confidence = 0.0
+            raise
+
+        self.classifier_tier = tier
+        self.classifier_confidence = confidence
+        return tier, confidence
+
+    def _tier_to_task_type(self, tier: str) -> TaskType:
+        """Convert predicted tier to TaskType enum."""
+        tier_to_task = {
+            "fast": TaskType.GENERAL,
+            "general": TaskType.CODING,
+            "reasoning": TaskType.REASONING,
+        }
+        return tier_to_task.get(tier, TaskType.GENERAL)
+
+    def _detect_task_type_keywords(self, query: str) -> TaskType:
+        """Fallback: keyword-based detection (original logic)."""
         if any(
             keyword in query
             for keyword in ("debug", "bug", "error", "exception", "traceback")

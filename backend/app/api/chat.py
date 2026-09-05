@@ -27,7 +27,7 @@ async def chat(request: ChatRequest) -> ChatResponse:
 
     try:
         routing_start = time.perf_counter()
-        routing_decision = routing_service.route(request.query)
+        routing_decision = await routing_service.route(request.query)
         routing_latency_ms = (time.perf_counter() - routing_start) * 1_000
 
         model_start = time.perf_counter()

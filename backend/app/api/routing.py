@@ -21,6 +21,6 @@ async def route_query(request: RouteRequest) -> RoutingDecision:
             registry=create_model_registry(),
             analyzer=QueryAnalyzer(),
         )
-        return routing_service.route(request.query)
+        return await routing_service.route(request.query)
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
