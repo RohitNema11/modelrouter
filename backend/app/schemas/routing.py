@@ -12,7 +12,6 @@ class TaskType(StrEnum):
     SUMMARIZATION = "summarization"
     EXTRACTION = "extraction"
     CREATIVE = "creative"
-    OTHER = "other"
 
 
 class QueryAnalysis(BaseModel):

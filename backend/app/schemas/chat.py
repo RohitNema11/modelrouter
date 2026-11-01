@@ -27,7 +27,7 @@ class ChatResponse(BaseModel):
     attempts: int = Field(ge=1)
     routing: RoutingDecision
     tokens: TokenUsage
-    estimated_cost_usd: float = Field(ge=0)
+    estimated_cost_usd: float | None = Field(default=None, ge=0)
     routing_latency_ms: float = Field(ge=0)
     model_latency_ms: float = Field(ge=0)
     total_latency_ms: float = Field(ge=0)

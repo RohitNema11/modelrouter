@@ -38,6 +38,15 @@ def test_detects_reasoning_query() -> None:
     assert analysis.required_capabilities
 
 
+def test_detects_work_rate_problem_as_mathematics() -> None:
+    analysis = QueryAnalyzer().analyze(
+        "Calculate the combined work rate and find the reciprocal."
+    )
+
+    assert analysis.task_type == TaskType.MATHEMATICS
+    assert "mathematics" in analysis.required_capabilities
+
+
 def test_complexity_never_exceeds_one() -> None:
     analysis = QueryAnalyzer().analyze(
         "Solve this advanced distributed systems algorithm step by step "

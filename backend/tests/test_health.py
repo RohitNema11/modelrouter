@@ -1,12 +1,16 @@
 from fastapi.testclient import TestClient
+import pytest
 
 from app.main import app
 
 
-client = TestClient(app)
+@pytest.fixture
+def client():
+    with TestClient(app) as test_client:
+        yield test_client
 
 
-def test_health_check() -> None:
+def test_health_check(client: TestClient) -> None:
     response = client.get("/health")
 
     assert response.status_code == 200
@@ -15,7 +19,18 @@ def test_health_check() -> None:
         "environment": "development",
     }
 
-def test_list_models() -> None:
+
+def test_readiness_check(client: TestClient) -> None:
+    response = client.get("/ready")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "status": "ready",
+        "environment": "development",
+    }
+
+
+def test_list_models(client: TestClient) -> None:
     response = client.get("/api/models")
 
     assert response.status_code == 200
@@ -27,10 +42,15 @@ def test_list_models() -> None:
         "general",
         "reasoning",
     ]
-    assert models[0]["provider"] == "mock"
+    assert [model["model_id"] for model in models] == [
+        "gemini-3.5-flash-lite",
+        "gemini-3.6-flash",
+        "gemini-3.8-flash",
+    ]
+    assert models[0]["provider"] == "gemini"
     assert models[2]["context_window"] == 131_072
 
-def test_route_query() -> None:
+def test_route_query(client: TestClient) -> None:
     response = client.post(
         "/api/route",
         json={
@@ -46,22 +66,18 @@ def test_route_query() -> None:
     decision = response.json()
 
     assert decision["selected_model"] in {"fast", "general", "reasoning"}
-    assert decision["analysis"]["task_type"] in {
-        "coding",
-        "reasoning",
-        "general",
-    }
-    assert decision["analysis"]["complexity"] == 0.0
-    assert decision["analysis"]["required_capabilities"] == []
+    assert decision["analysis"]["task_type"] == "coding"
+    assert decision["analysis"]["complexity"] > 0.0
+    assert "coding" in decision["analysis"]["required_capabilities"]
     assert 0.0 <= decision["confidence"] <= 1.0
 
 
-def test_route_query_rejects_empty_query() -> None:
+def test_route_query_rejects_empty_query(client: TestClient) -> None:
     response = client.post("/api/route", json={"query": ""})
 
     assert response.status_code == 422
 
-def test_chat_query_returns_response_and_metadata() -> None:
+def test_chat_query_returns_response_and_metadata(client: TestClient) -> None:
     response = client.post(
         "/api/chat",
         json={"query": "Write a Python function to reverse a string."},
@@ -72,7 +88,7 @@ def test_chat_query_returns_response_and_metadata() -> None:
     result = response.json()
 
     assert result["selected_model"] == "general"
-    assert result["response"].startswith("[Mock general response]")
+    assert result["response"].startswith("Test response for:")
     assert result["routing"]["analysis"]["task_type"] == "coding"
 
     assert result["tokens"]["input_tokens"] == 8
@@ -92,7 +108,7 @@ def test_chat_query_returns_response_and_metadata() -> None:
     assert result["total_latency_ms"] >= 0
 
 
-def test_chat_query_rejects_empty_query() -> None:
+def test_chat_query_rejects_empty_query(client: TestClient) -> None:
     response = client.post("/api/chat", json={"query": ""})
 
     assert response.status_code == 422

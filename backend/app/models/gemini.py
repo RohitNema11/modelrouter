@@ -1,60 +1,58 @@
-from groq import AsyncGroq
+from google import genai
+from google.genai import types
 
 from app.models.base import BaseModel, ModelMetadata, ModelResponse
 
 
-class GroqModel(BaseModel):
-    """Groq-backed implementation of the shared model interface."""
+class GeminiModel(BaseModel):
+    """Gemini-backed implementation of the shared model interface."""
 
     def __init__(
         self,
         metadata: ModelMetadata,
-        groq_model_id: str,
+        gemini_model_id: str,
         api_key: str,
         timeout_seconds: float,
     ) -> None:
         self.metadata = metadata
-        self._groq_model_id = groq_model_id
-        self._client = AsyncGroq(
+        self.gemini_model_id = gemini_model_id
+        self._client = genai.Client(
             api_key=api_key,
-            timeout=timeout_seconds,
+            http_options=types.HttpOptions(
+                timeout=int(timeout_seconds * 1_000),
+            ),
         )
 
     async def generate(self, prompt: str) -> ModelResponse:
-        """Generate a response through Groq and normalize its result."""
-        completion = await self._client.chat.completions.create(
-            model=self._groq_model_id,
-            messages=[
-                {
-                    "role": "user",
-                    "content": prompt,
-                }
-            ],
+        """Generate a response through Gemini and normalize its result."""
+        response = await self._client.aio.models.generate_content(
+            model=self.gemini_model_id,
+            contents=prompt,
         )
-
-        content = completion.choices[0].message.content or ""
-        usage = completion.usage
+        usage = response.usage_metadata
 
         return ModelResponse(
-            content=content,
-            input_tokens=usage.prompt_tokens if usage else 0,
-            output_tokens=usage.completion_tokens if usage else 0,
+            content=response.text or "",
+            input_tokens=usage.prompt_token_count if usage else 0,
+            output_tokens=usage.candidates_token_count if usage else 0,
             model_name=self.metadata.name,
         )
 
-def create_groq_models(
+
+def create_gemini_models(
     api_key: str,
     timeout_seconds: float,
-) -> list[GroqModel]:
-    """Create the three production Groq model tiers."""
-
+    reasoning_timeout_seconds: float,
+) -> list[GeminiModel]:
+    """Create the three configured Gemini model tiers."""
     model_definitions = [
         ModelMetadata(
             name="fast",
-            provider="groq",
+            provider="gemini",
             tier="fast",
-            input_cost_per_million=0.05,
-            output_cost_per_million=0.08,
+            model_id="gemini-3.5-flash-lite",
+            input_cost_per_million=0.30,
+            output_cost_per_million=2.50,
             context_window=131_072,
             capabilities=frozenset(
                 {"general", "summarization", "extraction", "classification"}
@@ -64,10 +62,11 @@ def create_groq_models(
         ),
         ModelMetadata(
             name="general",
-            provider="groq",
+            provider="gemini",
             tier="general",
-            input_cost_per_million=0.075,
-            output_cost_per_million=0.30,
+            model_id="gemini-3.6-flash",
+            input_cost_per_million=0.75,
+            output_cost_per_million=3.75,
             context_window=131_072,
             capabilities=frozenset(
                 {
@@ -84,10 +83,11 @@ def create_groq_models(
         ),
         ModelMetadata(
             name="reasoning",
-            provider="groq",
+            provider="gemini",
             tier="reasoning",
-            input_cost_per_million=0.15,
-            output_cost_per_million=0.60,
+            model_id="gemini-3.8-flash",
+            input_cost_per_million=0.75,
+            output_cost_per_million=3.75,
             context_window=131_072,
             capabilities=frozenset(
                 {
@@ -106,18 +106,16 @@ def create_groq_models(
         ),
     ]
 
-    groq_model_ids = {
-        "fast": "llama-3.1-8b-instant",
-        "general": "openai/gpt-oss-20b",
-        "reasoning": "openai/gpt-oss-120b",
-    }
-
     return [
-        GroqModel(
+        GeminiModel(
             metadata=metadata,
-            groq_model_id=groq_model_ids[metadata.name],
+            gemini_model_id=metadata.model_id or metadata.name,
             api_key=api_key,
-            timeout_seconds=timeout_seconds,
+            timeout_seconds=(
+                reasoning_timeout_seconds
+                if metadata.tier == "reasoning"
+                else timeout_seconds
+            ),
         )
         for metadata in model_definitions
     ]

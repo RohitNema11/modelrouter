@@ -5,13 +5,9 @@ from app.router.classifier import create_default_classifier
 class QueryAnalyzer:
     """Classify a query using ML classifier (primary) with keyword fallback."""
 
-    def __init__(self, use_classifier: bool = True, use_keywords_fallback: bool = True):
+    def __init__(self, use_classifier: bool = True):
         self.use_classifier = use_classifier
-        self.use_keywords_fallback = use_keywords_fallback
         self.classifier = None
-        self.classifier_confidence = 0.0
-        self.classifier_tier: str | None = None
-        self.classifier_error: Exception | None = None
         
         if use_classifier:
             self.classifier = create_default_classifier()
@@ -34,34 +30,10 @@ class QueryAnalyzer:
 
     def classify(self, query: str) -> tuple[str, float]:
         """Return only the classifier's tier and confidence."""
-        self.classifier_tier = None
-        self.classifier_error = None
-
         if not self.use_classifier or self.classifier is None:
-            error = RuntimeError("Classifier is unavailable.")
-            self.classifier_error = error
-            self.classifier_confidence = 0.0
-            raise error
+            raise RuntimeError("Classifier is unavailable.")
 
-        try:
-            tier, confidence = self.classifier.predict(query.lower().strip())
-        except Exception as error:
-            self.classifier_error = error
-            self.classifier_confidence = 0.0
-            raise
-
-        self.classifier_tier = tier
-        self.classifier_confidence = confidence
-        return tier, confidence
-
-    def _tier_to_task_type(self, tier: str) -> TaskType:
-        """Convert predicted tier to TaskType enum."""
-        tier_to_task = {
-            "fast": TaskType.GENERAL,
-            "general": TaskType.CODING,
-            "reasoning": TaskType.REASONING,
-        }
-        return tier_to_task.get(tier, TaskType.GENERAL)
+        return self.classifier.predict(query.lower().strip())
 
     def _detect_task_type_keywords(self, query: str) -> TaskType:
         """Fallback: keyword-based detection (original logic)."""
@@ -89,12 +61,6 @@ class QueryAnalyzer:
 
         if any(
             keyword in query
-            for keyword in ("solve", "prove", "logic", "reason step by step")
-        ):
-            return TaskType.REASONING
-
-        if any(
-            keyword in query
             for keyword in (
                 "calculate",
                 "equation",
@@ -102,9 +68,29 @@ class QueryAnalyzer:
                 "derivative",
                 "probability",
                 "math",
+                "fraction",
+                "ratio",
+                "percentage",
+                "reciprocal",
+                "work rate",
             )
         ):
             return TaskType.MATHEMATICS
+
+        if any(
+            keyword in query
+            for keyword in (
+                "solve",
+                "prove",
+                "logic",
+                "reason step by step",
+                "step by step",
+                "deduce",
+                "infer",
+                "work through",
+            )
+        ):
+            return TaskType.REASONING
 
         if any(keyword in query for keyword in ("summarize", "summary", "tl;dr")):
             return TaskType.SUMMARIZATION

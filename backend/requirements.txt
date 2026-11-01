@@ -3,6 +3,6 @@ uvicorn[standard]
 pydantic-settings
 pytest
 httpx
-groq
+google-genai
 scikit-learn
 numpy

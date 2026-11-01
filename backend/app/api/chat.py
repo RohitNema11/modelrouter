@@ -1,41 +1,30 @@
 import time
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
-from app.core.config import get_settings
-from app.models.registry import create_model_registry
-from app.reliability.executor import ModelExecutor
-from app.router.analyzer import QueryAnalyzer
-from app.router.router import Router
+from app.reliability.executor import UpstreamGenerationError
 from app.schemas.chat import ChatRequest, ChatResponse, TokenUsage
+from app.services import ApplicationServices, get_services
 from app.telemetry.cost import estimate_cost
 
 router = APIRouter(prefix="/api", tags=["chat"])
 
 
 @router.post("/chat", response_model=ChatResponse)
-async def chat(request: ChatRequest) -> ChatResponse:
+async def chat(
+    request: ChatRequest,
+    services: ApplicationServices = Depends(get_services),
+) -> ChatResponse:
     """Route a query, generate a response, and return execution metadata."""
     total_start = time.perf_counter()
-    settings = get_settings()
-
-    registry = create_model_registry()
-    routing_service = Router(
-        registry=registry,
-        analyzer=QueryAnalyzer(),
-    )
 
     try:
         routing_start = time.perf_counter()
-        routing_decision = await routing_service.route(request.query)
+        routing_decision = await services.router.route(request.query)
         routing_latency_ms = (time.perf_counter() - routing_start) * 1_000
 
         model_start = time.perf_counter()
-        executor = ModelExecutor(
-            registry=registry,
-            max_retries=settings.max_retries,
-        )
-        execution = await executor.generate(
+        execution = await services.executor.generate(
             selected_model_name=routing_decision.selected_model,
             prompt=request.query,
             required_capabilities=routing_decision.analysis.required_capabilities,
@@ -44,12 +33,20 @@ async def chat(request: ChatRequest) -> ChatResponse:
 
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
-    except RuntimeError as error:
-        raise HTTPException(status_code=502, detail=str(error)) from error
+    except UpstreamGenerationError as error:
+        raise HTTPException(
+            status_code=502,
+            detail={
+                "code": "provider_generation_failed",
+                "message": "The model provider did not complete the request.",
+                "reason": error.reason,
+                "attempts": error.attempts,
+            },
+        ) from error
 
     total_latency_ms = (time.perf_counter() - total_start) * 1_000
     model_response = execution.response
-    executed_model = registry.get(model_response.model_name)
+    executed_model = services.registry.get(model_response.model_name)
 
     estimated_cost_usd = estimate_cost(
         metadata=executed_model.metadata,
@@ -71,7 +68,11 @@ async def chat(request: ChatRequest) -> ChatResponse:
                 model_response.input_tokens + model_response.output_tokens
             ),
         ),
-        estimated_cost_usd=round(estimated_cost_usd, 8),
+        estimated_cost_usd=(
+            round(estimated_cost_usd, 8)
+            if estimated_cost_usd is not None
+            else None
+        ),
         routing_latency_ms=round(routing_latency_ms, 2),
         model_latency_ms=round(model_latency_ms, 2),
         total_latency_ms=round(total_latency_ms, 2),

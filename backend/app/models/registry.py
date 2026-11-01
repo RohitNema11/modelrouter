@@ -1,11 +1,5 @@
 from app.core.config import get_settings
 from app.models.base import BaseModel
-from app.models.groq import create_groq_models
-from app.models.mock import (
-    create_fast_model,
-    create_general_model,
-    create_reasoning_model,
-)
 
 
 class ModelRegistry:
@@ -27,28 +21,20 @@ class ModelRegistry:
 
 
 def create_model_registry() -> ModelRegistry:
-    """Create a registry using the configured model provider."""
+    """Create a registry backed by Gemini."""
     settings = get_settings()
 
-    if settings.model_provider == "mock":
-        models = [
-            create_fast_model(),
-            create_general_model(),
-            create_reasoning_model(),
-        ]
-    elif settings.model_provider == "groq":
-        if settings.groq_api_key is None:
-            raise ValueError(
-                "GROQ_API_KEY must be configured when MODEL_PROVIDER=groq."
-            )
-
-        models = create_groq_models(
-            api_key=settings.groq_api_key.get_secret_value(),
-            timeout_seconds=settings.request_timeout_seconds,
-        )
-    else:
+    if settings.gemini_api_key is None:
         raise ValueError(
-            "MODEL_PROVIDER must be either 'mock' or 'groq'."
+            "GEMINI_API_KEY must be configured before using the application."
         )
 
+    # Keep the provider SDK out of import-time paths such as /health and tooling.
+    from app.models.gemini import create_gemini_models
+
+    models = create_gemini_models(
+        api_key=settings.gemini_api_key.get_secret_value(),
+        timeout_seconds=settings.request_timeout_seconds,
+        reasoning_timeout_seconds=settings.reasoning_timeout_seconds,
+    )
     return ModelRegistry(models=models)

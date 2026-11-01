@@ -10,12 +10,13 @@ class ModelMetadata:
     name: str
     provider: str
     tier: str
-    input_cost_per_million: float
-    output_cost_per_million: float
+    input_cost_per_million: float | None
+    output_cost_per_million: float | None
     context_window: int
     capabilities: FrozenSet[str]
     reliability_score: float
     expected_latency_ms: int
+    model_id: str | None = None
 
 
 @dataclass(frozen=True)

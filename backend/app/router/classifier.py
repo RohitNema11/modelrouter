@@ -1,9 +1,9 @@
+import csv
+from pathlib import Path
+
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import Pipeline
-import pickle
-import csv
-from pathlib import Path
 
 
 class TierClassifier:
@@ -14,7 +14,6 @@ class TierClassifier:
             ("tfidf", TfidfVectorizer(max_features=100, ngram_range=(1, 2))),
             ("classifier", LogisticRegression(max_iter=200, random_state=42))
         ])
-        self.classes = ["fast", "general", "reasoning"]
         self.is_trained = False
 
     def train(self, queries: list[str], labels: list[str]) -> None:
@@ -34,23 +33,9 @@ class TierClassifier:
         confidence = self.model.predict_proba([query]).max()
         return tier, confidence
 
-    def save(self, filepath: str) -> None:
-        """Persist model to disk."""
-        with open(filepath, 'wb') as f:
-            pickle.dump(self.model, f)
-
-    def load(self, filepath: str) -> None:
-        """Load model from disk."""
-        if Path(filepath).exists():
-            with open(filepath, 'rb') as f:
-                self.model = pickle.load(f)
-            self.is_trained = True
-
-
-def load_training_data(csv_path: str = None) -> tuple[list[str], list[str]]:
+def load_training_data(csv_path: Path | None = None) -> tuple[list[str], list[str]]:
     """Load training data from CSV file. Format: query,tier"""
     if csv_path is None:
-        # Default path relative to this file
         current_dir = Path(__file__).parent.parent.parent
         csv_path = current_dir / "datasets" / "training_queries.csv"
     
@@ -61,7 +46,6 @@ def load_training_data(csv_path: str = None) -> tuple[list[str], list[str]]:
         with open(csv_path, 'r', encoding='utf-8') as f:
             reader = csv.DictReader(f)
             for row in reader:
-                # Remove quotes if present
                 query = row['query'].strip().strip('"')
                 tier = row['tier'].strip().strip('"')
                 queries.append(query)

@@ -29,9 +29,10 @@ def test_routes_moderate_coding_query_to_general_model() -> None:
     )
 
     assert decision.selected_model == "general"
-    assert decision.analysis.task_type in {TaskType.CODING, TaskType.REASONING}
-    assert decision.analysis.complexity == 0.0
-    assert decision.analysis.required_capabilities == []
+    assert decision.analysis.task_type == TaskType.CODING
+    assert decision.analysis.complexity > 0.0
+    assert "coding" in decision.analysis.required_capabilities
+    assert "keyword rules" in decision.analysis.reasoning
 
 
 def test_routes_complex_algorithm_query_to_reasoning_model() -> None:
@@ -42,8 +43,9 @@ def test_routes_complex_algorithm_query_to_reasoning_model() -> None:
     )
 
     assert decision.selected_model == "reasoning"
-    assert decision.analysis.complexity == 0.0
-    assert decision.analysis.required_capabilities == []
+    assert decision.analysis.task_type == TaskType.CODING
+    assert decision.analysis.complexity > 0.0
+    assert "coding" in decision.analysis.required_capabilities
     assert 0.75 <= decision.confidence <= 1.0
 
 
@@ -55,39 +57,49 @@ def test_routes_debugging_query_to_general_model() -> None:
     )
 
     assert decision.selected_model in {"fast", "general", "reasoning"}
-    assert decision.analysis.complexity == 0.0
-    assert decision.analysis.required_capabilities == []
+    assert decision.analysis.task_type == TaskType.DEBUGGING
+    assert decision.analysis.complexity > 0.0
+    assert "debugging" in decision.analysis.required_capabilities
 
 
 def test_routing_explanation_mentions_selected_model() -> None:
     decision = asyncio.run(create_router().route("Summarize this article."))
 
     assert decision.selected_model in decision.reasoning
-    assert "classifier" in decision.reasoning or "LLM escalation" in decision.reasoning
+    assert (
+        "classifier decision" in decision.reasoning
+        or "rule-based complexity fallback" in decision.reasoning
+    )
 
 
-def test_low_classifier_confidence_escalates_to_llm() -> None:
-    analyzer = QueryAnalyzer(use_classifier=False)
-    router = Router(create_model_registry(), analyzer, classifier_confidence_threshold=0.75)
-
-    async def predict_tier(self: Router, query: str) -> str:
-        return "reasoning"
-
-    router._get_llm_tier_prediction = MethodType(predict_tier, router)
-    decision = asyncio.run(router.route("An ambiguous query."))
-
-    assert decision.selected_model == "reasoning"
-    assert "LLM escalation" in decision.reasoning
-
-
-def test_llm_failure_uses_complexity_rule_fallback() -> None:
+def test_low_classifier_confidence_uses_complexity_fallback() -> None:
     analyzer = QueryAnalyzer(use_classifier=False)
     router = Router(create_model_registry(), analyzer)
+    decision = asyncio.run(router.route("An ambiguous query."))
 
-    async def fail_llm(self: Router, query: str) -> str:
-        raise RuntimeError("LLM unavailable")
+    assert decision.selected_model == "fast"
+    assert decision.analysis.task_type == TaskType.GENERAL
+    assert "rule-based complexity fallback" in decision.reasoning
 
-    router._get_llm_tier_prediction = MethodType(fail_llm, router)
+
+def test_classifier_confidence_above_threshold_uses_classifier() -> None:
+    analyzer = QueryAnalyzer()
+    analyzer.classify = MethodType(
+        lambda self, query: ("reasoning", 0.73),
+        analyzer,
+    )
+    router = Router(create_model_registry(), analyzer)
+
+    decision = asyncio.run(router.route("Explain the Josephus problem step by step."))
+
+    assert decision.selected_model == "reasoning"
+    assert decision.confidence == 0.73
+    assert "classifier decision" in decision.reasoning
+
+
+def test_classifier_failure_uses_complexity_rule_fallback() -> None:
+    analyzer = QueryAnalyzer(use_classifier=False)
+    router = Router(create_model_registry(), analyzer)
     decision = asyncio.run(router.route("Write a Python function."))
 
     assert decision.selected_model == "general"

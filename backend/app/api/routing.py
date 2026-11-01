@@ -1,10 +1,8 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 
-from app.models.registry import create_model_registry
-from app.router.analyzer import QueryAnalyzer
-from app.router.router import Router
 from app.schemas.routing import RoutingDecision
+from app.services import ApplicationServices, get_services
 
 router = APIRouter(prefix="/api", tags=["routing"])
 
@@ -14,13 +12,9 @@ class RouteRequest(BaseModel):
 
 
 @router.post("/route", response_model=RoutingDecision)
-async def route_query(request: RouteRequest) -> RoutingDecision:
+async def route_query(
+    request: RouteRequest,
+    services: ApplicationServices = Depends(get_services),
+) -> RoutingDecision:
     """Analyze a query and return a model selection without generating text."""
-    try:
-        routing_service = Router(
-            registry=create_model_registry(),
-            analyzer=QueryAnalyzer(),
-        )
-        return await routing_service.route(request.query)
-    except ValueError as error:
-        raise HTTPException(status_code=400, detail=str(error)) from error
+    return await services.router.route(request.query)
