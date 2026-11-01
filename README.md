@@ -1,15 +1,9 @@
 # ModelRouter
 
-## Evaluation runner
+A FastAPI service that routes queries across fast, general, and reasoning LLM tiers. It uses ML classification and rule-based fallback to select a model, with retries and compatible model failover for provider errors.
 
-From `backend`, configure `GEMINI_API_KEY` and run:
-
-```powershell
-python -m app.evaluation.runner --output evaluation-report.json
-```
-
-The runner performs 12 calls in a fixed order: each of the three standard
-queries against `fast`, `general`, and `reasoning`, followed by the same three
-queries through routing. The JSON report includes each response, selected
-model, retries, fallback state, latency, token usage, estimated cost, and
-aggregate routing-selection metrics.
+## Features
+- Query routing by tier and capability
+- Chat API with token, latency, and estimated-cost metadata
+- Retry and fallback handling
+- Evaluation runner for comparing routed and fixed-model requests
